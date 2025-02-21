@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Modern Chat</title>
+    <link rel="stylesheet" href="/style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="auth-screen">
+        <div class="auth-card">
+            <div class="brand-header">
+                <div class="logo">💬</div>
+                <h1>ChatSphere</h1>
+                <p>Connect & collaborate securely</p>
+            </div>
+            
+            <div class="auth-form">
+                <div class="input-group">
+                    <label for="username">Your Name</label>
+                    <input type="text" id="username" placeholder="Enter your name">
+                </div>
+                
+                <div class="action-buttons">
+                    <button class="primary-btn" onclick="createRoom()">
+                        <span>Create New Room</span>
+                        <span class="icon">➕</span>
+                    </button>
+                    
+                    <div class="divider">
+                        <span>or</span>
+                    </div>
+                    
+                    <div class="input-group">
+                        <label for="room-code">Room Code</label>
+                        <input type="text" id="room-code" placeholder="Enter room code">
+                    </div>
+                    <button class="secondary-btn" onclick="joinRoom()">
+                        <span>Join Existing Room</span>
+                        <span class="icon">🚪</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="chat-screen hidden">
+        <div class="chat-header">
+            <div class="room-info">
+                <h2>Room: <span id="room-code-display"></span></h2>
+                <p>Connected as: <span id="current-user"></span></p>
+            </div>
+            <button class="leave-btn" onclick="location.reload()">Leave Room</button>
+        </div>
+
+        <div class="chat-container">
+            <div class="message-feed" id="chat-messages"></div>
+            
+            <div class="message-composer">
+                <input type="text" id="message-input" 
+                       placeholder="Type your message..." 
+                       onkeypress="handleKeyPress(event)">
+                <button class="send-btn" onclick="sendMessage()">
+                    <span>Send</span>
+                    <span class="icon">✈️</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+        <script>
+            let ws;
+let roomCode;
+let username;
+
+function createRoom() {
+    username = document.getElementById('username').value.trim();
+    if (!username) return showError('Please enter your name');
+    
+    ws = new WebSocket('ws://localhost:8080');
+    setupWebSocketHandlers();
+    
+    ws.onopen = () => {
+        ws.send(JSON.stringify({ 
+            type: 'create-room',
+            username: username
+        }));
+        showLoading();
+    };
+}
+
+function joinRoom() {
+    username = document.getElementById('username').value.trim();
+    roomCode = document.getElementById('room-code').value.trim().toUpperCase();
+    
+    if (!username || !roomCode) return showError('Please fill all fields');
+    
+    ws = new WebSocket('ws://localhost:8080');
+    setupWebSocketHandlers();
+    
+    ws.onopen = () => {
+        ws.send(JSON.stringify({
+            type: 'join-room',
+            username: username,
+            code: roomCode
+        }));
+        showLoading();
+    };
+}
+
+function setupWebSocketHandlers() {
+    ws.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+        
+        if (data.type === 'room-created') {
+            roomCode = data.code;
+            showChatScreen();
+            updateRoomInfo();
+        }
+
+        if (data.type === 'room-joined') {
+            showChatScreen();
+            updateRoomInfo();
+        }
+
+        if (data.type === 'message') {
+            addMessage(data.text, 'remote', data.sender);
+        }
+
+        if (data.type === 'error') {
+            showError(data.message);
+        }
+    };
+
+    ws.onerror = (error) => {
+        showError('Connection error. Please try again.');
+    };
+}
+
+function sendMessage() {
+    const message = document.getElementById('message-input').value.trim();
+    if (!message) return;
+
+    ws.send(JSON.stringify({
+        type: 'message',
+        text: message
+    }));
+    
+    addMessage(message, 'local', 'You');
+    document.getElementById('message-input').value = '';
+}
+
+function handleKeyPress(event) {
+    if (event.key === 'Enter') sendMessage();
+}
+
+function showChatScreen() {
+    document.querySelector('.auth-screen').classList.add('hidden');
+    document.querySelector('.chat-screen').classList.remove('hidden');
+}
+
+function updateRoomInfo() {
+    document.getElementById('room-code-display').textContent = roomCode;
+    document.getElementById('current-user').textContent = username;
+}
+
+function addMessage(text, type, sender) {
+    const messagesDiv = document.getElementById('chat-messages');
+    const messageDiv = document.createElement('div');
+    
+    messageDiv.className = `message ${type}`;
+    messageDiv.innerHTML = `
+        <div class="message-header">
+            <span class="sender">${sender}</span>
+            <span class="timestamp">${new Date().toLocaleTimeString()}</span>
+        </div>
+        <div class="message-body">${text}</div>
+    `;
+    
+    messagesDiv.appendChild(messageDiv);
+    messagesDiv.scrollTop = messagesDiv.scrollHeight;
+}
+
+function showLoading() {
+    // Implement loading state UI if needed
+}
+
+function showError(message) {
+    const errorEl = document.createElement('div');
+    errorEl.className = 'error-message';
+    errorEl.textContent = message;
+    document.body.appendChild(errorEl);
+    
+    setTimeout(() => errorEl.remove(), 3000);
+}
+        </script>
+</body>
+</html>
